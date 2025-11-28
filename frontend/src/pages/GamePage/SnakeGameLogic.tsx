@@ -106,7 +106,7 @@ const GameLogic = ({
     }
   }
 
-  const { playerPieces, allowedMoves, clashes, food, hazards, walls } =
+  const { playerPieces, allowedMoves, clashes, food, hazards, walls, terrain } =
     selectedTurn
 
   // Map clashes to positions
@@ -344,6 +344,11 @@ const GameLogic = ({
       </Box>
     )
     cellBackgroundMap[position] = "#8B4513" // Brown color for walls
+  })
+
+  // Place terrain
+  terrain?.forEach((position) => {
+    cellBackgroundMap[position] = "#ff0000" // Red for terrain
   })
 
   // Place hazards

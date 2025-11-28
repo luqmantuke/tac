@@ -19,12 +19,17 @@ interface TeamConfigurationProps {
   onTeamsChange: (teams: Team[]) => void;
   maxTurns: number;
   onMaxTurnsChange: (turns: number) => void;
+  terrianPercentage: number;
+  onTerrianPercentageChange: (value: number) => void;
 }
 
 export const TeamConfiguration: React.FC<TeamConfigurationProps> = ({
   teams,
   onTeamsChange,
-  maxTurns,onMaxTurnsChange,
+  maxTurns,
+  onMaxTurnsChange,
+  terrianPercentage,
+  onTerrianPercentageChange,
 }) => {
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamColor, setNewTeamColor] = useState("#000000");
@@ -52,12 +57,27 @@ export const TeamConfiguration: React.FC<TeamConfigurationProps> = ({
 
       {/* Turn Limit */}
       <FormControl fullWidth margin="normal">
-        <TextField
-          type="number"
-          label="Max Turns"
-          value={maxTurns}
-          onChange={(e) => onMaxTurnsChange(parseInt(e.target.value))}
-        />
+        <div style={{ display: "flex", gap: "10px" }}>
+          <TextField
+            type="number"
+            label="Max Turns"
+            value={maxTurns}
+            onChange={(e) => onMaxTurnsChange(parseInt(e.target.value))}
+          />
+          <TextField
+            type="number"
+            label="Terrian Percentage"
+            value={terrianPercentage}
+            onChange={(e) => {
+              const nextValue = Math.min(
+                100,
+                Math.max(0, Number(e.target.value) || 0),
+              );
+              onTerrianPercentageChange(nextValue);
+            }}
+            inputProps={{ min: 0, max: 100 }}
+          />
+        </div>
       </FormControl>
 
       {/* Team Creation */}

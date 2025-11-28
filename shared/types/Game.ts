@@ -64,6 +64,7 @@
     teams?: Team[]
     maxTurns?: number // Default: 100
     gameMode?: "individual" | "team"
+    terrianPercentage?: number // Percentage of the board filled with fatal terrain
   }
 
   // Updated GameState interface with the new 'winners' structure
@@ -110,6 +111,7 @@
     playerPieces: { [playerID: string]: number[] } // Each snake is represented by a map entry
     allowedMoves: { [playerID: string]: number[] } // Map of playerID to allowed move indexes
     walls: number[] // Positions of walls on the board
+    terrain?: number[] // Positions of fatal terrain
     clashes: Clash[] // Array of clashes
     moves: { [playerID: string]: number }
     winners: Winner[] // Updated to an array of winner objects
