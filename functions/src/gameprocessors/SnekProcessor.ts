@@ -7,7 +7,9 @@ interface SnakeGameState {
   // Input data
   boardWidth: number
   boardHeight: number
-  
+  walls: number[]
+  terrain: number[]
+
   // Mutable game state
   newSnakes: { [playerID: string]: number[] }
   newFood: number[]
@@ -30,6 +32,25 @@ export class SnekProcessor extends GameProcessor {
 
   constructor(gameState: GameState) {
     super(gameState)
+  }
+
+  private markPlayerDeath(
+    gameState: SnakeGameState,
+    playerID: string,
+    reason: string,
+    playerIDs: string[] = [playerID],
+  ): void {
+    const snake = gameState.newSnakes[playerID]
+    if (!snake) return
+
+    gameState.deadPlayers.add(playerID)
+    snake.forEach((position) => {
+      gameState.clashes.push({
+        index: position,
+        playerIDs,
+        reason,
+      })
+    })
   }
 
   firstTurn(): Turn {
@@ -61,11 +82,20 @@ export class SnekProcessor extends GameProcessor {
     // Initialize playerPieces
     const playerPieces = this.initializeSnakes()
 
-    // Initialize food positions
-    const food = this.initializeFood(boardWidth, boardHeight, playerPieces)
-
     // Initialize walls
     const walls = this.getWallPositions(boardWidth, boardHeight)
+
+    // Initialize terrain based on percentage
+    const terrain = this.generateTerrain(
+      boardWidth,
+      boardHeight,
+      playerPieces,
+      walls,
+      this.gameSetup.terrianPercentage ?? 0,
+    )
+
+    // Initialize food positions
+    const food = this.initializeFood(boardWidth, boardHeight, playerPieces, terrain, walls)
 
     // Initialize allowed moves
     const allowedMoves = this.calculateAllowedMoves(
@@ -94,6 +124,7 @@ export class SnekProcessor extends GameProcessor {
       alivePlayers: gamePlayers.map((player) => player.id),
       food: food,
       hazards: [],
+      terrain,
       playerPieces: playerPieces,
       allowedMoves: allowedMoves,
       walls: walls,
@@ -135,7 +166,15 @@ export class SnekProcessor extends GameProcessor {
   }
 
   private initializeGameState(currentTurn: Turn): SnakeGameState {
-    const { playerPieces, food, hazards, alivePlayers, playerHealth } = currentTurn
+    const {
+      playerPieces,
+      food,
+      hazards,
+      alivePlayers,
+      playerHealth,
+      walls = this.getWallPositions(this.gameSetup.boardWidth, this.gameSetup.boardHeight),
+      terrain = [],
+    } = currentTurn
       const { boardWidth, boardHeight } = this.gameSetup
 
       // Deep copy playerPieces and other mutable objects
@@ -150,6 +189,8 @@ export class SnekProcessor extends GameProcessor {
       newSnakes,
       newFood: [...food],
       newHazards: [...hazards],
+      walls,
+      terrain: [...terrain],
       newPlayerHealth: { ...playerHealth },
       newAlivePlayers: [...alivePlayers],
       playerMoves: {},
@@ -223,7 +264,10 @@ export class SnekProcessor extends GameProcessor {
   private detectAndHandleCollisions(gameState: SnakeGameState): void {
     // Wall collisions
     this.checkWallCollisions(gameState)
-    
+
+    // Terrain collisions
+    this.checkTerrainCollisions(gameState)
+
     // Self collisions
     this.checkSelfCollisions(gameState)
     
@@ -235,23 +279,32 @@ export class SnekProcessor extends GameProcessor {
   }
 
   private checkWallCollisions(gameState: SnakeGameState): void {
-    const walls = this.getWallPositions(gameState.boardWidth, gameState.boardHeight)
-    
+    const walls = gameState.walls
+
     gameState.newAlivePlayers.forEach((playerID) => {
       const snake = gameState.newSnakes[playerID]
       const headIndex = snake[0]
-      
+
       if (walls.includes(headIndex)) {
-        gameState.deadPlayers.add(playerID)
-          snake.forEach((position) => {
-          gameState.clashes.push({
-              index: position,
-              playerIDs: [playerID],
-              reason: "Collided with wall",
-            })
-          })
-          logger.info(
+        this.markPlayerDeath(gameState, playerID, "Collided with wall")
+        logger.info(
           `Snek: Player ${playerID} collided with a wall at position ${headIndex}.`,
+        )
+      }
+    })
+  }
+
+  private checkTerrainCollisions(gameState: SnakeGameState): void {
+    if (!gameState.terrain.length) return
+
+    const terrain = new Set(gameState.terrain)
+
+    gameState.newAlivePlayers.forEach((playerID) => {
+      const headIndex = gameState.newSnakes[playerID][0]
+      if (terrain.has(headIndex)) {
+        this.markPlayerDeath(gameState, playerID, "Entered terrain")
+        logger.info(
+          `Snek: Player ${playerID} entered terrain at position ${headIndex}.`,
         )
       }
     })
@@ -261,18 +314,11 @@ export class SnekProcessor extends GameProcessor {
     gameState.newAlivePlayers.forEach((playerID) => {
       const snake = gameState.newSnakes[playerID]
       const headIndex = snake[0]
-      
+
       // Self-collision check (snake hits its own body)
       if (snake.slice(1).includes(headIndex)) {
-        gameState.deadPlayers.add(playerID)
-          snake.forEach((position) => {
-          gameState.clashes.push({
-              index: position,
-              playerIDs: [playerID],
-              reason: "Collided with own body",
-            })
-          })
-          logger.info(
+        this.markPlayerDeath(gameState, playerID, "Collided with own body")
+        logger.info(
           `Snek: Player ${playerID} collided with its own body at position ${headIndex}.`,
         )
       }
@@ -314,36 +360,32 @@ export class SnekProcessor extends GameProcessor {
           minLength = Math.min(minLength, gameState.newSnakes[playerID].length)
           })
 
-          playersAtHead.forEach((playerID) => {
-          if (gameState.newSnakes[playerID].length === minLength) {
-            gameState.deadPlayers.add(playerID)
-            gameState.newSnakes[playerID].forEach((pos) => {
-              gameState.clashes.push({
-                  index: pos,
-                  playerIDs: playersAtHead,
-                  reason: "Head-on collision (shortest snake(s) died)",
-                })
-              })
+            playersAtHead.forEach((playerID) => {
+            if (gameState.newSnakes[playerID].length === minLength) {
+              this.markPlayerDeath(
+                gameState,
+                playerID,
+                "Head-on collision (shortest snake(s) died)",
+                playersAtHead,
+              )
             }
-          })
-        } else {
-          const playerID = playersAtHead[0]
-          const otherPlayersAtPosition = newOccupiedPositions[position].filter(
-            (id) => id !== playerID,
-          )
-
-          if (otherPlayersAtPosition.length > 0) {
-          gameState.deadPlayers.add(playerID)
-          gameState.newSnakes[playerID].forEach((pos) => {
-            gameState.clashes.push({
-                index: pos,
-                playerIDs: [playerID, ...otherPlayersAtPosition],
-                reason: "Collided with another snake's body",
-              })
             })
+          } else {
+            const playerID = playersAtHead[0]
+            const otherPlayersAtPosition = newOccupiedPositions[position].filter(
+              (id) => id !== playerID,
+            )
+
+            if (otherPlayersAtPosition.length > 0) {
+            this.markPlayerDeath(
+              gameState,
+              playerID,
+              "Collided with another snake's body",
+              [playerID, ...otherPlayersAtPosition],
+            )
+            }
           }
-        }
-      })
+        })
   }
 
   private removeDeadPlayers(gameState: SnakeGameState): void {
@@ -370,27 +412,20 @@ export class SnekProcessor extends GameProcessor {
     const snake = gameState.newSnakes[playerID]
         const headPosition = snake[0]
 
-    const foodIndex = gameState.newFood.indexOf(headPosition)
-        if (foodIndex !== -1) {
-      // Player ate food
-      gameState.newFood.splice(foodIndex, 1)
-      snake.push(snake[snake.length - 1]) // Grow snake (duplicate tail)
-      gameState.newPlayerHealth[playerID] = 100 // Restore health
-        } else {
-      // Player didn't eat food, lose health
-      gameState.newPlayerHealth[playerID] -= 1
-      if (gameState.newPlayerHealth[playerID] <= 0) {
-        gameState.deadPlayers.add(playerID)
-            snake.forEach((pos) => {
-          gameState.clashes.push({
-                index: pos,
-                playerIDs: [playerID],
-                reason: "Died due to zero health",
-              })
-            })
+      const foodIndex = gameState.newFood.indexOf(headPosition)
+          if (foodIndex !== -1) {
+        // Player ate food
+        gameState.newFood.splice(foodIndex, 1)
+        snake.push(snake[snake.length - 1]) // Grow snake (duplicate tail)
+        gameState.newPlayerHealth[playerID] = 100 // Restore health
+          } else {
+        // Player didn't eat food, lose health
+        gameState.newPlayerHealth[playerID] -= 1
+        if (gameState.newPlayerHealth[playerID] <= 0) {
+          this.markPlayerDeath(gameState, playerID, "Died due to zero health")
+            }
           }
-        }
-  }
+    }
 
   private generateNewFood(gameState: SnakeGameState): void {
       if (Math.random() < this.foodSpawnChance) {
@@ -400,6 +435,8 @@ export class SnekProcessor extends GameProcessor {
         gameState.newSnakes,
         gameState.newFood,
         gameState.newHazards,
+        gameState.terrain,
+        gameState.walls,
         )
         if (freePositions.length > 0) {
           const randomIndex = Math.floor(Math.random() * freePositions.length)
@@ -457,17 +494,19 @@ export class SnekProcessor extends GameProcessor {
       playerHealth: gameState.newPlayerHealth,
       startTime: Timestamp.fromMillis(now),
       endTime: Timestamp.fromMillis(now + this.gameSetup.maxTurnTime * 1000),
-      scores: gameState.newScores,
-      alivePlayers: validAlivePlayers,
-      food: gameState.newFood,
-      hazards: gameState.newHazards,
-      playerPieces: gameState.newSnakes,
-      allowedMoves: gameState.newAllowedMoves,
-      clashes: gameState.clashes,
-      moves: gameState.playerMoves,
-      winners: winners,
+        scores: gameState.newScores,
+        alivePlayers: validAlivePlayers,
+        food: gameState.newFood,
+        hazards: gameState.newHazards,
+        terrain: gameState.terrain,
+        playerPieces: gameState.newSnakes,
+        allowedMoves: gameState.newAllowedMoves,
+        walls: gameState.walls,
+        clashes: gameState.clashes,
+        moves: gameState.playerMoves,
+        winners: winners,
+      }
     }
-  }
 
   // Helper methods that were in the original implementation
   private initializeSnakes(): { [playerID: string]: number[] } {
@@ -485,11 +524,15 @@ export class SnekProcessor extends GameProcessor {
     return playerPieces
   }
 
-  private initializeFood(
+  private collectBlockedPositions(
     boardWidth: number,
     boardHeight: number,
     playerPieces: { [playerID: string]: number[] },
-  ): number[] {
+    food: number[],
+    hazards: number[],
+    terrain: number[] = [],
+    walls?: number[],
+  ): Set<number> {
     const occupiedPositions = new Set<number>()
 
     // Add snake positions to occupied positions
@@ -497,9 +540,76 @@ export class SnekProcessor extends GameProcessor {
       snake.forEach((position) => occupiedPositions.add(position))
     })
 
+    // Add existing items
+    food.forEach((pos) => occupiedPositions.add(pos))
+    hazards.forEach((pos) => occupiedPositions.add(pos))
+    terrain.forEach((pos) => occupiedPositions.add(pos))
+
     // Add wall positions to the occupied set
-    const wallPositions = this.getWallPositions(boardWidth, boardHeight)
+    const wallPositions = walls ?? this.getWallPositions(boardWidth, boardHeight)
     wallPositions.forEach((position) => occupiedPositions.add(position))
+
+    return occupiedPositions
+  }
+
+  private generateTerrain(
+    boardWidth: number,
+    boardHeight: number,
+    playerPieces: { [playerID: string]: number[] },
+    walls: number[],
+    terrianPercentage: number,
+  ): number[] {
+    const normalizedPercentage = Math.min(Math.max(terrianPercentage, 0), 100)
+    if (normalizedPercentage === 0) return []
+
+    const targetCount = Math.floor(
+      (boardWidth * boardHeight * normalizedPercentage) / 100,
+    )
+    if (targetCount === 0) return []
+
+    const occupiedPositions = this.collectBlockedPositions(
+      boardWidth,
+      boardHeight,
+      playerPieces,
+      [],
+      [],
+      [],
+      walls,
+    )
+
+    const availablePositions: number[] = []
+    for (let i = 0; i < boardWidth * boardHeight; i++) {
+      if (!occupiedPositions.has(i)) {
+        availablePositions.push(i)
+      }
+    }
+
+    const terrain: number[] = []
+    while (terrain.length < targetCount && availablePositions.length > 0) {
+      const randomIndex = Math.floor(Math.random() * availablePositions.length)
+      const [position] = availablePositions.splice(randomIndex, 1)
+      terrain.push(position)
+    }
+
+    return terrain
+  }
+
+  private initializeFood(
+    boardWidth: number,
+    boardHeight: number,
+    playerPieces: { [playerID: string]: number[] },
+    terrain: number[],
+    walls: number[],
+  ): number[] {
+    const occupiedPositions = this.collectBlockedPositions(
+      boardWidth,
+      boardHeight,
+      playerPieces,
+      [],
+      [],
+      terrain,
+      walls,
+    )
 
     const foodPositions: number[] = []
 
@@ -639,24 +749,19 @@ export class SnekProcessor extends GameProcessor {
     playerPieces: { [playerID: string]: number[] },
     food: number[],
     hazards: number[],
+    terrain: number[] = [],
+    walls?: number[],
   ): number[] {
     const totalCells = boardWidth * boardHeight
-    const occupied = new Set<number>()
-
-    // Add snake positions
-    Object.values(playerPieces).forEach((snake) => {
-      snake.forEach((pos) => occupied.add(pos))
-    })
-
-    // Add food positions
-    food.forEach((pos) => occupied.add(pos))
-
-    // Add hazard positions
-    hazards.forEach((pos) => occupied.add(pos))
-
-    // Add wall positions
-    const wallPositions = this.getWallPositions(boardWidth, boardHeight)
-    wallPositions.forEach((pos) => occupied.add(pos))
+    const occupied = this.collectBlockedPositions(
+      boardWidth,
+      boardHeight,
+      playerPieces,
+      food,
+      hazards,
+      terrain,
+      walls,
+    )
 
     const freePositions: number[] = []
     for (let i = 0; i < totalCells; i++) {

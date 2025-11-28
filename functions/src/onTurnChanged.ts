@@ -65,6 +65,11 @@ const processTurn = async (
 
   // Prepare the Battlesnake API request for each bot
   const requests = botsToQuery.map(async (bot) => {
+    const hazardPositions = [
+      ...(turnData.hazards || []),
+      ...(turnData.terrain || []),
+    ]
+
     // Build the request body based on Battlesnake API format, excluding the perimeter and flipping the y-axis
     const youBody = turnData.playerPieces[bot.id].map((pos) => {
       const x = pos % gameData.setup.boardWidth
@@ -98,7 +103,7 @@ const processTurn = async (
           const y = Math.floor(pos / gameData.setup.boardWidth)
           return adjustPosition(x, y) // Adjust the position inward and flip y-axis
         }),
-        hazards: (turnData.hazards || []).map((pos) => {
+        hazards: hazardPositions.map((pos) => {
           const x = pos % gameData.setup.boardWidth
           const y = Math.floor(pos / gameData.setup.boardWidth)
           return adjustPosition(x, y) // Adjust the position inward and flip y-axis

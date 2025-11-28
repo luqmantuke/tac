@@ -21,6 +21,7 @@ export const onSessionCreated = functions.firestore
         boardHeight: 13,
         playersReady: [],
         maxTurnTime: 10,
+        terrianPercentage: 0,
         startRequested: false,
         started: false,
         timeCreated: FieldValue.serverTimestamp(),

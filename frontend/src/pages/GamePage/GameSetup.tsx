@@ -55,6 +55,9 @@ const GameSetup: React.FC = () => {
   const [boardSize, setBoardSize] = useState<BoardSize>("medium")
   const [teams, setTeams] = useState<Team[]>(gameSetup?.teams || [])
   const [maxTurns, setMaxTurns] = useState<number>(gameSetup?.maxTurns || 100)
+  const [terrianPercentage, setTerrianPercentage] = useState<number>(
+    gameSetup?.terrianPercentage ?? 0,
+  )
 
   const gameDocRef = doc(db, "sessions", sessionName, "setups", gameID)
 
@@ -87,6 +90,11 @@ const GameSetup: React.FC = () => {
       //  Update max turns
       if (gameSetup.maxTurns !== undefined) {
         setMaxTurns(gameSetup.maxTurns)
+      }
+
+      //  Update terrian percentage
+      if (gameSetup.terrianPercentage !== undefined) {
+        setTerrianPercentage(gameSetup.terrianPercentage)
       }
 
       //  Update teams
@@ -182,6 +190,13 @@ const GameSetup: React.FC = () => {
       maxTurns: newMaxTurns,
     })
     setMaxTurns(newMaxTurns)
+  }
+
+  const handleTerrianPercentageChange = async (newTerrianPercentage: number) => {
+    await updateDoc(gameDocRef, {
+      terrianPercentage: newTerrianPercentage,
+    })
+    setTerrianPercentage(newTerrianPercentage)
   }
 
   // Handler for selecting game type
@@ -374,15 +389,17 @@ const GameSetup: React.FC = () => {
               minHeight: "56px",
             }}
           >
-            <TeamConfiguration
-              teams={teams}
-              onTeamsChange={handleTeamsChange}
-              maxTurns={maxTurns}
-              onMaxTurnsChange={handleMaxTurnsChange}
-            />
-          </Box>
-        </FormControl>
-      )}
+              <TeamConfiguration
+                teams={teams}
+                onTeamsChange={handleTeamsChange}
+                maxTurns={maxTurns}
+                onMaxTurnsChange={handleMaxTurnsChange}
+                terrianPercentage={terrianPercentage}
+                onTerrianPercentageChange={handleTerrianPercentageChange}
+              />
+            </Box>
+          </FormControl>
+        )}
 
       {/* Players Table */}
       {(gameType === "teamsnek" ) && teams.length > 0 ? (
